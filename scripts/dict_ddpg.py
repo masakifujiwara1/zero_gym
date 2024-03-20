@@ -1,4 +1,4 @@
-from REINFORCE import *
+from ddpg import *
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,42 +8,42 @@ def draw_history(history):
     plt.plot(x, history)
     plt.show()
 
-episodes = 3000
-# sync_interval = 20
-env = gym.make("CartPole-v1", render_mode="rgb_array")
+episodes = 300
+sync_interval = 20
+env = gym.make("Pendulum-v1", render_mode="human", g=9.81, )
 # env = gym.make("CartPole-v1", render_mode="human")
-agent = Agent()
+agent = Agent(batch_size=64, path="/home/gym_zero/models/")
 reward_history = []
 max_reward = 0
+load_path = "/home/gym_zero/models/"
+agent.model_load(load_path)
+# reward_history = []
+# render_data = np.array([500, 500, 3])
 
 for episode in range(episodes):
     state = env.reset()
+    # env.render()
     state = copy.deepcopy(state[0])
+    # state = torch.tensor(state, dtype=torch.float)
     done = False
     total_reward = 0
 
     while not done:
-        action, prob = agent.get_action(state)
+        action = agent.get_action(state)
         # print(action)
-        action = int(action)
-        next_state, reward, done, info, _ = env.step(action)
-
-        # print(type(reward))
+        action = action.detach().numpy()
+        # action = int(action)
+        # print(env.last_u)
+        next_state, reward, done, info, _ = env.step(action.data)
 
         # agent.update(state, action, reward, next_state, done)
-        agent.add(reward, prob)
         state = next_state
         total_reward += reward
     
     # if episode % sync_interval == 0:
     #     agent.sync_qnet()
 
-    agent.update()
     reward_history.append(total_reward)
-
-    if total_reward >= max_reward:
-        agent.model_save("/home/gym_zero/models/")
-        max_reward = total_reward
 
     print("epidode:" + str(episode) + " reward:" + str(total_reward))
 

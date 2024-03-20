@@ -9,20 +9,26 @@ class PolicyNet(nn.Module):
         super().__init__()
         # self.l1 = nn.Linear(4, 128)
         self.l1 = nn.Linear(3, 128)
-        self.l2 = nn.Linear(128, action_size)
+        self.l2 = nn.Linear(128, 128)
         self.softmax = nn.Softmax(dim=1)
+
+        self.mean = nn.Linear(128, action_size)
+        self.std = nn.Linear(128, action_size)
 
     def forward(self, x):
         x = torch.from_numpy(x.astype(np.float32)).clone()
         x = F.relu(self.l1(x))
         # x = self.softmax(self.l2(x))
-        x = 2 * torch.tanh(self.l2(x))
-        return x
+        # x = 2 * torch.tanh(self.l2(x))
+        x = F.relu(self.l2(x))
+        mean = self.mean(x)
+        std = torch.exp(self.std(x))
+        return mean, std
 
 class ValueNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.l1 = nn.Linear(4, 128)
+        self.l1 = nn.Linear(3, 128)
         self.l2 = nn.Linear(128, 1)
 
     def forward(self, x):
@@ -36,7 +42,7 @@ class Agent:
         self.gamma = 0.98
         self.lr_pi = 0.0002
         self.lr_v = 0.0005
-        self.action_size = 2
+        self.action_size = 1
 
         self.memory = []
         self.pi = PolicyNet(self.action_size)
@@ -47,13 +53,18 @@ class Agent:
 
     def get_action(self, state):
         state = state[np.newaxis, :]
-        probs = self.pi(state)
+        # print(state.shape)
+        mean, std = self.pi(state)
         # print(probs.data)
-        probs = probs[0]
+        # probs = probs[0]
         # print(probs.data.sum(), "{:.10g}".format(probs.data[0]), "{:.10g}".format(probs.data[1]))
         # probs = probs.data / probs.data.sum()
-        action = np.random.choice(len(probs), p=probs.detach().numpy().copy())
-        return action, probs[action]
+        # action = np.random.choice(len(probs), p=probs.detach().numpy().copy())
+        # return action, probs[action]
+        action = torch.normal(mean=mean, std=std)
+        normal_distribution = torch.distributions.Normal(mean, std)
+        prob = normal_distribution.log_prob(action).exp()
+        return action, prob
 
     def add(self, reward, prob):
         data = (reward, prob)
@@ -63,9 +74,14 @@ class Agent:
         state = state[np.newaxis, :]
         next_state = next_state[np.newaxis, :]
 
+        # print(next_state.shape)
+        # print(type(reward))
+        reward = reward[0]
+
         # self.vの損失
         target = reward + self.gamma * self.v(next_state) * (1 - done)
         # target.detach()
+        # print(state.shape)
         v = self.v(state)
         loss_v = self.mse(v, target)
 
